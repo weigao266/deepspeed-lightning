@@ -26,7 +26,7 @@ _DATA_PARALLEL_GLOBAL_RANKS = None
 _GLOBAL_MEMORY_BUFFER = None
 
 
-def initialize_model_parallel(
+def initialize_seq_parallel(
     data_parallel_size: int = 1,
     sequence_parallel_size: int = 1,
 ) -> None:
@@ -235,3 +235,83 @@ def destroy_parallel_groups():
     _SEQUENCE_DATA_PARALLEL_GROUP = None
     global _GLOBAL_MEMORY_BUFFER
     _GLOBAL_MEMORY_BUFFER = None
+    
+
+def _split_along_first_dim(input_):
+    """Split the tensor along its first dimension and keep the
+    corresponding slice."""
+
+    world_size = get_sequence_parallel_world_size()
+    # Bypass the function if we are using only 1 GPU.
+    if world_size == 1:
+        return input_
+
+    # Split along first dimension.
+    dim_size = input_.size()[0]
+    assert (
+        dim_size % world_size == 0
+    ), "First dimension of the tensor should be divisible by tensor parallel size"
+    local_dim_size = dim_size // world_size
+    rank = get_sequence_parallel_rank()
+    dim_offset = rank * local_dim_size
+
+    output = input_[dim_offset : dim_offset + local_dim_size].contiguous()
+
+    return output
+
+
+def _gather_along_first_dim(input_, async_op=False, cached_buffer_name=None):
+    """Gather tensors and concatinate along the first dimension."""
+
+    world_size = get_sequence_parallel_world_size()
+    # Bypass the function if we are using only 1 GPU.
+    if world_size == 1:
+        return input_
+
+    dim_size = list(input_.size())
+    dim_size[0] = dim_size[0] * world_size
+
+    if cached_buffer_name is None:
+        output = torch.empty(
+            dim_size, dtype=input_.dtype, device=torch.cuda.current_device()
+        )
+    else:
+        output = get_global_memory_buffer().get_tensor(
+            dim_size, input_.dtype, cached_buffer_name
+        )
+    handle = torch.distributed._all_gather_base(
+        output,
+        input_.contiguous(),
+        group=get_sequence_parallel_group(),
+        async_op=async_op,
+    )
+
+    if async_op:
+        # Note: [Naman] I am still not sure if this is needed but original code
+        # for sequence_parallel had it, so for now keeping it.
+        # Delay the start of weight gradient computation shortly (3us) to have
+        # reduce scatter scheduled first and have GPU resources allocated
+        _ = torch.empty(1, device=input_.device) + 1
+        return output, handle
+
+    return output
+
+
+class _ScatterToSequenceParallelGroup(torch.autograd.Function):
+    """Split the input and keep only the corresponding chuck to the rank."""
+
+    @staticmethod
+    def symbolic(graph, input_):
+        return _split_along_first_dim(input_)
+
+    @staticmethod
+    def forward(ctx, input_):
+        return _split_along_first_dim(input_)
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        return _gather_along_first_dim(grad_output)
+
+
+def scatter_to_sequence_parallel_group(input_):
+    return _ScatterToSequenceParallelGroup.apply(input_)
