@@ -7,7 +7,7 @@ from .seq_parallel_utils import GlobalMemoryBuffer
 _DATA_PARALLEL_GROUP = None
 _DATA_PARALLEL_GROUP_GLOO = None
 
-# For DeepSpeed's sequence parallel
+# For deepspeed-lightning's sequence parallel
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_WORLD_SIZE = None
 _SEQUENCE_PARALLEL_RANK = None
@@ -26,7 +26,7 @@ _DATA_PARALLEL_GLOBAL_RANKS = None
 _GLOBAL_MEMORY_BUFFER = None
 
 
-def initialize_seq_parallel(
+def initialize_lightning_seq_parallel(
     data_parallel_size: int = 1,
     sequence_parallel_size: int = 1,
 ) -> None:
@@ -35,8 +35,8 @@ def initialize_seq_parallel(
     assert torch.distributed.is_initialized()
     world_size: int = torch.distributed.get_world_size()
 
-    enable_ds_sequence_parallel = sequence_parallel_size > 1
-    if enable_ds_sequence_parallel:
+    enable_lightning_sequence_parallel = sequence_parallel_size > 1
+    if enable_lightning_sequence_parallel:
         if world_size % sequence_parallel_size != 0:
             raise RuntimeError(
                 f"world_size ({world_size}) is not divisible by sequence_parallel_size {sequence_parallel_size})"
@@ -73,7 +73,7 @@ def initialize_seq_parallel(
     assert _SEQUENCE_DATA_PARALLEL_GROUP is None, \
         'sequence data parallel group is already initialized'
     all_data_sequence_parallel_group_ranks = []
-    if enable_ds_sequence_parallel:
+    if enable_lightning_sequence_parallel:
         for i in range(num_sequence_data_parallel_groups):
             ranks = range(i * sequence_data_parallel_size,
                         (i + 1) * sequence_data_parallel_size)
