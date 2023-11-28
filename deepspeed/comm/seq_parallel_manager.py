@@ -237,7 +237,7 @@ def destroy_parallel_groups():
     _GLOBAL_MEMORY_BUFFER = None
     
 
-def _split_along_first_dim(input_):
+def split_along_first_dim(input_):
     """Split the tensor along its first dimension and keep the
     corresponding slice."""
 
@@ -260,7 +260,7 @@ def _split_along_first_dim(input_):
     return output
 
 
-def _gather_along_first_dim(input_, async_op=False, cached_buffer_name=None):
+def gather_along_first_dim(input_, async_op=False, cached_buffer_name=None):
     """Gather tensors and concatinate along the first dimension."""
 
     world_size = get_sequence_parallel_world_size()
@@ -297,21 +297,21 @@ def _gather_along_first_dim(input_, async_op=False, cached_buffer_name=None):
     return output
 
 
-class _ScatterToSequenceParallelGroup(torch.autograd.Function):
+class ScatterToSequenceParallelGroup(torch.autograd.Function):
     """Split the input and keep only the corresponding chuck to the rank."""
 
     @staticmethod
     def symbolic(graph, input_):
-        return _split_along_first_dim(input_)
+        return split_along_first_dim(input_)
 
     @staticmethod
     def forward(ctx, input_):
-        return _split_along_first_dim(input_)
+        return split_along_first_dim(input_)
 
     @staticmethod
     def backward(ctx, grad_output):
-        return _gather_along_first_dim(grad_output)
+        return gather_along_first_dim(grad_output)
 
 
 def scatter_to_sequence_parallel_group(input_):
-    return _ScatterToSequenceParallelGroup.apply(input_)
+    return ScatterToSequenceParallelGroup.apply(input_)
