@@ -1,13 +1,12 @@
-"""Lightning sequence parallel groups."""
+"""Communication manager for lightning attention data parallel + sequence parallel."""
 
 import torch
 from .seq_parallel_utils import GlobalMemoryBuffer
 
 # Data parallel group that the current rank belongs to.
 _DATA_PARALLEL_GROUP = None
-_DATA_PARALLEL_GROUP_GLOO = None
 
-# For deepspeed-lightning's sequence parallel
+# Sequence parallel group, world size, rank
 _SEQUENCE_PARALLEL_GROUP = None
 _SEQUENCE_PARALLEL_WORLD_SIZE = None
 _SEQUENCE_PARALLEL_RANK = None
@@ -52,7 +51,6 @@ def initialize_lightning_seq_parallel(
 
     # Build the data-parallel groups.
     global _DATA_PARALLEL_GROUP
-    global _DATA_PARALLEL_GROUP_GLOO
     global _DATA_PARALLEL_GLOBAL_RANKS
     assert _DATA_PARALLEL_GROUP is None, 'data parallel group is already initialized'
     all_data_parallel_group_ranks = []
