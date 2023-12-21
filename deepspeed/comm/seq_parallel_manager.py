@@ -235,6 +235,9 @@ def destroy_parallel_groups():
     _GLOBAL_MEMORY_BUFFER = None
     
 
+def broadcast_tensor(tensor, src, group):
+    torch.distributed.broadcast(tensor, src=src, group=group)
+
 def split_along_first_dim(input_):
     """Split the tensor along its first dimension and keep the
     corresponding slice."""
@@ -244,13 +247,18 @@ def split_along_first_dim(input_):
     if world_size == 1:
         return input_
 
+    # broadcast input from rank 0 to all other ranks
+    rank = get_sequence_parallel_rank()
+    src_rank = get_sequence_parallel_src_rank()
+    group = get_sequence_parallel_group()
+    broadcast_tensor(input_, src_rank, group=group)
+
     # Split along first dimension.
     dim_size = input_.size()[0]
     assert (
         dim_size % world_size == 0
     ), "First dimension of the tensor should be divisible by tensor parallel size"
     local_dim_size = dim_size // world_size
-    rank = get_sequence_parallel_rank()
     dim_offset = rank * local_dim_size
 
     output = input_[dim_offset : dim_offset + local_dim_size].contiguous()
